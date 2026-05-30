@@ -1,109 +1,92 @@
 import { create } from 'zustand';
-import { TaskItem, getAllTasks, addTask, updateTask, deleteTask as apiDeleteTask } from '../utils/handle-api';
+import { createJSONStorage, persist } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-interface TaskState {
-  tasks: TaskItem[];
-  loading: boolean;
-  hasLoadedFromStorage: boolean;
-  fetchTasks: (setLoading?: React.Dispatch<React.SetStateAction<boolean>>) => void;
-  addTask: (
-    text: string,
-    completed: boolean,
-    dueDate: string | null,
-    priority: 'Baixa' | 'Média' | 'Alta',
-    onSuccess: () => void
-  ) => void;
-  updateTask: (
-    taskId: string,
-    text: string,
-    completed: boolean,
-    dueDate: string | null,
-    priority: 'Baixa' | 'Média' | 'Alta',
-    onSuccess: () => void
-  ) => void;
-  deleteTask: (_id: string) => void;
-  deleteAllTasks: () => void;
-  setHasLoadedFromStorage: (value: boolean) => void;
-}
-
-const saveToStorage = (tasks: TaskItem[]) => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem('tasks-storage', JSON.stringify(tasks));
-    console.log('💾 Tasks salvas no localStorage:', tasks.length);
-  }
+export type Task = {
+    id: string;
+    title: string;
+    completed: boolean;
 };
 
-const loadFromStorage = (): TaskItem[] => {
-  if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('tasks-storage');
-    if (saved) {
-      try {
-        const tasks = JSON.parse(saved);
-        console.log('📀 Tasks carregadas do localStorage:', tasks.length);
-        return tasks;
-      } catch (e) {
-        console.error('Erro ao carregar do storage:', e);
-      }
+export type TaskFilter = 'all' | 'completed' | 'pending';
+
+type TaskState = {
+    tasks: Task[];
+    filter: TaskFilter;
+    editingTaskId: string | null;
+
+    addTask: (title: string, completed?: boolean) => void;
+    updateTask: (taskId: string, title: string, completed: boolean) => void;
+    toggleTaskCompleted: (taskId: string) => void;
+    deleteTask: (taskId: string) => void;
+    deleteAllTasks: () => void;
+
+    setFilter: (filter: TaskFilter) => void;
+    startEditing: (taskId: string | null) => void;
+};
+
+export const useTaskStore = create<TaskState>()(
+  persist(
+    (set) => ({
+    tasks: [],
+    filter: 'all',
+    editingTaskId: null,
+
+    addTask: (title, completed = false) => {
+        const newTask: Task = {
+            id: String(new Date().getTime()),
+            title,
+            completed,
+        };
+
+        set((state) => ({
+            tasks: [...state.tasks, newTask],
+        }));
+    },
+
+    updateTask: (taskId, title, completed) => {
+        set((state) => ({
+            tasks: state.tasks.map((task) =>
+                task.id === taskId
+                    ? {
+                        ...task,
+                        title,
+                        completed,
+                    }
+                    : task
+            ),
+        }));
+    },
+
+    toggleTaskCompleted: (taskId) => {
+        set((state) => ({
+            tasks: state.tasks.map((task) =>
+                task.id === taskId
+                    ? { ...task, completed: !task.completed }
+                    : task
+            ),
+        }));
+    },
+
+    deleteTask: (taskId) => {
+        set((state) => ({
+            tasks: state.tasks.filter((task) => task.id !== taskId),
+        }));
+    },
+
+    deleteAllTasks: () => {
+        set({ tasks: [] });
+    },
+
+    setFilter: (filter) => set({ filter }),
+
+    startEditing: (taskId) => set({ editingTaskId: taskId }),
+    }),
+    {
+      name: 'tasks-store',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({ tasks: state.tasks, filter: state.filter }),
     }
-  }
-  return [];
-};
+  )
+);
 
-export const useTaskStore = create<TaskState>((set, get) => ({
-  tasks: loadFromStorage(),
-  loading: false,
-  hasLoadedFromStorage: false,
-
-  fetchTasks: (setLoading?: React.Dispatch<React.SetStateAction<boolean>>) => {
-    if (get().loading) return;
-
-    set({ loading: true });
-
-    getAllTasks(
-      (tasks) => {
-        console.log('📡 Tasks carregadas da API:', tasks.length);
-        set({ tasks, loading: false });
-        saveToStorage(tasks);
-      },
-      (loading) => set({ loading })
-    );
-  },
-
-  addTask: (text: string, completed: boolean, dueDate: string | null, priority: 'Baixa' | 'Média' | 'Alta', onSuccess: () => void) => {
-    console.log('➕ Store.addTask chamado:', { text, completed, dueDate, priority });
-    addTask(text, completed, dueDate, priority, (tasks) => {
-      set({ tasks });
-      saveToStorage(tasks);
-      onSuccess();
-    }, onSuccess);
-  },
-
-  updateTask: (taskId: string, text: string, completed: boolean, dueDate: string | null, priority: 'Baixa' | 'Média' | 'Alta', onSuccess: () => void) => {
-    console.log('✏️ Store.updateTask chamado:', { taskId, text, completed, dueDate, priority });
-    updateTask(taskId, text, completed, dueDate, priority, (tasks) => {
-      set({ tasks });
-      saveToStorage(tasks);
-      onSuccess();
-    }, onSuccess);
-  },
-
-  deleteTask: (_id: string) => {
-    console.log('🗑️ Store.deleteTask chamado:', _id);
-    apiDeleteTask(_id, (tasks) => {
-      console.log('✅ Store.deleteTask callback, tasks restantes:', tasks.length);
-      set({ tasks });
-      saveToStorage(tasks);
-    });
-  },
-
-  deleteAllTasks: () => {
-    const { tasks, deleteTask } = get();
-    tasks.forEach(task => {
-      deleteTask(task._id);
-    });
-  },
-
-  setHasLoadedFromStorage: (value: boolean) => {
-    set({ hasLoadedFromStorage: value });
-  },
-}));

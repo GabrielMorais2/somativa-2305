@@ -8,7 +8,6 @@ export interface TaskItem {
   text: string;
   completed?: boolean;
   dueDate?: string;
-  priority?: 'Baixa' | 'Média' | 'Alta';
 }
 
 export const getAllTasks = (setTasks: React.Dispatch<React.SetStateAction<TaskItem[]>>, setLoading?: React.Dispatch<React.SetStateAction<boolean>>) => {
@@ -26,12 +25,11 @@ export const addTask = (
   text: string,
   completed: boolean,
   dueDate: string | null,
-  priority: 'Baixa' | 'Média' | 'Alta',
   setTasks: React.Dispatch<React.SetStateAction<TaskItem[]>>,
   onSuccess: () => void
 ) => {
   axios
-    .post(`${baseURL}/save`, { text, completed, dueDate, priority })
+    .post(`${baseURL}/save`, { text, completed, dueDate })
     .then(() => {
       onSuccess();
       getAllTasks(setTasks);
@@ -44,13 +42,11 @@ export const updateTask = (
   text: string,
   completed: boolean,
   dueDate: string | null,
-  priority: 'Baixa' | 'Média' | 'Alta',
   setTasks: React.Dispatch<React.SetStateAction<TaskItem[]>>,
   onSuccess: () => void
 ) => {
-  console.log('🌐 API.updateTask chamado:', { taskId, text, completed, dueDate, priority });
   axios
-    .post(`${baseURL}/update`, { _id: taskId, text, completed, dueDate, priority })
+    .post(`${baseURL}/update`, { _id: taskId, text, completed, dueDate })
     .then(() => {
       onSuccess();
       getAllTasks(setTasks);
